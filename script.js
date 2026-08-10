@@ -164,6 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let unlocked = false;
 
   btnOpenSurprise.addEventListener('click', () => {
+    tryPlayAudio();
     if (unlocked) {
       revealMainExperience();
     } else {
@@ -229,6 +230,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function verifyPin() {
     if (currentPin === SECRET_PIN) {
       unlocked = true;
+      // Start invisible audio immediately on user click gesture!
+      tryPlayAudio();
+      
       pinDots.forEach(dot => dot.classList.add('success'));
       passcodeError.classList.remove('hidden');
       passcodeError.style.color = '#ffd700';
@@ -777,6 +781,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  btnToggleAudio.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleAudio();
+  });
+
+  // Auto-start audio on first user touch/click anywhere on page if not already playing
+  function unlockAudioOnGesture() {
+    if (!isPlaying) {
+      tryPlayAudio();
+    }
+    window.removeEventListener('pointerdown', unlockAudioOnGesture);
+  }
+  window.addEventListener('pointerdown', unlockAudioOnGesture);
+
   if (lockerModal) {
     const keys = lockerModal.querySelectorAll('.keypad-btn');
     keys.forEach(btn => {
@@ -1170,36 +1188,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function tryPlayAudio() {
-    // 1. Try side MP4 video audio first (User uploaded chahe_dukh_ho.mp4)
-    if (romanticVideo) {
-      romanticVideo.play().then(() => {
-        setAudioState(true);
-        return;
-      }).catch(err => {
-        console.log('Video play policy blocked/fallback...');
-      });
-    }
-
-    // 2. Try YouTube Player
-    if (ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+  async function tryPlayAudio() {
+    // 1. Try HTML5 Audio element first (bg-music with MP4/MP3 sources)
+    if (bgMusic) {
       try {
-        ytPlayer.playVideo();
+        bgMusic.volume = 1.0;
+        bgMusic.muted = false;
+        await bgMusic.play();
         setAudioState(true);
+        console.log('Audio playing via bg-music element!');
         return;
-      } catch (e) {
-        console.warn('YouTube play failed...');
+      } catch (err) {
+        console.log('bgMusic play blocked/error:', err);
       }
     }
 
-    // 3. Try HTML5 audio fallback
-    bgMusic.play().then(() => {
-      setAudioState(true);
-    }).catch(err => {
-      console.log('HTML5 Audio fallback to Web Audio Synth ambient track...');
-      startSynthMusic();
-      setAudioState(true);
-    });
+    // 2. Try romanticVideo MP4 element
+    if (romanticVideo) {
+      try {
+        romanticVideo.volume = 1.0;
+        romanticVideo.muted = false;
+        await romanticVideo.play();
+        setAudioState(true);
+        console.log('Audio playing via romanticVideo element!');
+        return;
+      } catch (err) {
+        console.log('romanticVideo play blocked/error:', err);
+      }
+    }
+
+    // 3. Try YouTube Player fallback
+    if (ytReady && ytPlayer && typeof ytPlayer.playVideo === 'function') {
+      try {
+        ytPlayer.unMute();
+        ytPlayer.setVolume(100);
+        ytPlayer.playVideo();
+        setAudioState(true);
+        console.log('Audio playing via YouTube API.');
+        return;
+      } catch (e) {
+        console.warn('YouTube play failed, falling back to Web Audio Synth...');
+      }
+    }
+
+    // 4. Web Audio Synthesizer Fallback
+    startSynthMusic();
+    setAudioState(true);
   }
 
   function pauseAudio() {
